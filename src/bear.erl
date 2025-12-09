@@ -25,11 +25,44 @@
 
 -module(bear).
 
--compile([export_all]).
-
 -export([
          get_statistics/1,
-         get_statistics/2
+         get_statistics/2,
+         get_statistics_subset/2,
+         %% Internal functions exported for testing
+         scan_values/1,
+         scan_values/2,
+         scan_values2/2,
+         scan_values2/3,
+         revsort/1,
+         arithmetic_mean/1,
+         geometric_mean/1,
+         harmonic_mean/1,
+         percentile/3,
+         variance/2,
+         std_deviation/2,
+         skewness/2,
+         kurtosis/2,
+         update_bin/3,
+         get_covariance/2,
+         ranks_of/1,
+         get_pearson_correlation/2,
+         get_kendall_correlation/2,
+         get_spearman_correlation/2,
+         kendall_correlation/2,
+         math_log/1,
+         inverse/1,
+         get_hist_bins/4,
+         round_bin/1,
+         round_bin/2,
+         get_bin_width/2,
+         get_bin_count/3,
+         tied_ordered_ranking/1,
+         tied_ordered_ranking/3,
+         kendall_right_of/2,
+         tied_add_prev/2,
+         tied_rank_worker/3,
+         perc/2
         ]).
 
 -define(HIST_BINS, 10).
@@ -208,8 +241,7 @@ arithmetic_mean(#scan_result{n=N, sumX=Sum}) ->
 geometric_mean(#scan_result{n=N, sumLog=SumLog}) ->
     math:exp(SumLog/N).
 
-harmonic_mean(#scan_result{sumInv=Zero}) when Zero =:= 0 orelse
-                                              Zero =:= 0.0 ->
+harmonic_mean(#scan_result{sumInv=Zero}) when Zero == 0 ->
     %% Protect against divide by 0 if we have all 0 values
     0;
 harmonic_mean(#scan_result{n=N, sumInv=Sum}) ->
@@ -238,7 +270,7 @@ std_deviation(Scan_res, Scan_res2) ->
 %% }
 skewness(#scan_result{n=N}=Scan_res, #scan_result2{x3=X3}=Scan_res2) ->
     case math:pow(std_deviation(Scan_res,Scan_res2), 3) of
-        0.0 ->
+        StdDev3 when StdDev3 == 0 ->
             0.0;  %% Is this really the correct thing to do here?
         Else ->
             (X3/N)/Else
@@ -254,7 +286,7 @@ skewness(#scan_result{n=N}=Scan_res, #scan_result2{x3=X3}=Scan_res2) ->
 %% }
 kurtosis(#scan_result{n=N}=Scan_res, #scan_result2{x4=X4}=Scan_res2) ->
     case math:pow(std_deviation(Scan_res,Scan_res2), 4) of
-        0.0 ->
+        StdDev4 when StdDev4 == 0 ->
             0.0;  %% Is this really the correct thing to do here?
         Else ->
             ((X4/N)/Else) - 3
@@ -267,18 +299,18 @@ get_histogram(Values, Scan_res, Scan_res2) ->
                          length(Values)
                         ),
 
-    Dict = lists:foldl(fun (Value, Dict) ->
-             update_bin(Value, Bins, Dict)
+    Map = lists:foldl(fun (Value, Map) ->
+             update_bin(Value, Bins, Map)
            end,
-           dict:from_list([{Bin, 0} || Bin <- Bins]),
+           maps:from_list([{Bin, 0} || Bin <- Bins]),
            Values),
 
-    lists:sort(dict:to_list(Dict)).
+    lists:sort(maps:to_list(Map)).
 
-update_bin(Value, [Bin|_Bins], Dict) when Value =< Bin ->
-    dict:update_counter(Bin, 1, Dict);
-update_bin(Values, [_Bin|Bins], Dict) ->
-    update_bin(Values, Bins, Dict).
+update_bin(Value, [Bin|_Bins], Map) when Value =< Bin ->
+    maps:update_with(Bin, fun(V) -> V + 1 end, 1, Map);
+update_bin(Values, [_Bin|Bins], Map) ->
+    update_bin(Values, Bins, Map).
 
 %% two pass covariance
 %% (http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Covariance)
@@ -356,7 +388,7 @@ get_pearson_correlation(Values1, Values2) ->
         end, {0,0,0,0,0,0}, Values1, Values2),
     Numer = (N*SumXY) - (SumX * SumY),
     case math:sqrt(((N*SumXX)-(SumX*SumX)) * ((N*SumYY)-(SumY*SumY))) of
-        0.0 ->
+        Denom when Denom == 0 ->
             0.0; %% Is this really the correct thing to do here?
         Denom ->
             Numer/Denom
@@ -372,20 +404,22 @@ foldl2(_F, Acc, [], []) ->
     Acc.
 
 %% wrapper for math:log/1 to avoid dividing by zero
-math_log(0) ->
-    1;
-math_log(0.0) ->
-    1.0;
+math_log(X) when X == 0 ->
+    case is_float(X) of
+        true -> 1.0;
+        false -> 1
+    end;
 math_log(X) when X < 0 ->
     0; % it's not possible to take a log of a negative number, return 0
 math_log(X) ->
     math:log(X).
 
 %% wrapper for calculating inverse to avoid dividing by zero
-inverse(0) ->
-    0;
-inverse(0.0) ->
-    0.0;
+inverse(X) when X == 0 ->
+    case is_float(X) of
+        true -> 0.0;
+        false -> 0
+    end;
 inverse(X) ->
     1/X.
 
