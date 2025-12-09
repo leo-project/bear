@@ -23,7 +23,9 @@
 %%% ====================================================================
 -module(bear_test).
 
--compile(export_all).
+-ifdef(TEST).
+-compile([export_all, nowarn_export_all]).
+-endif.
 
 -record(scan_result, {n=0, sumX=0, sumXX=0, sumInv=0, sumLog, max, min}).
 -record(scan_result2, {x2=0, x3=0, x4=0}).
@@ -148,10 +150,10 @@ kurtosis_test() ->
     ?assertEqual(-2.0, bear:kurtosis(#scan_result{n=10},#scan_result2{x2=81,x4=810})).
 
 update_bin_1_test() ->
-    %% with empty dict
-    Dict = dict:new(),
-    C = bear:update_bin(4, [4], Dict),
-    ?assertEqual(1, dict:fetch(4, C)).
+    %% with empty map
+    Map = maps:new(),
+    C = bear:update_bin(4, [4], Map),
+    ?assertEqual(1, maps:get(4, C)).
 
 get_covariance_exceptions_test() ->
     %% Array 1 is too short
